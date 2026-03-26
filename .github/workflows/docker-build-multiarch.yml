@@ -7,15 +7,10 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: 'Image tag version (e.g., v3.10.1, latest)'
-        required: true
-        default: 'latest'
-        type: string
-      force_build:
-        description: '强制构建（即使没有更新）'
+        description: 'Image tag version (e.g., v3.10.1, latest) - 留空则自动使用最新 tag'
         required: false
-        default: 'true'
-        type: boolean
+        default: ''
+        type: string
   push:
     tags:
       - 'v*.*.*'
