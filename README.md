@@ -41,7 +41,7 @@
 | 基本面 | 结构化聚合 | 新增 `fundamental_context`（valuation/growth/earnings/institution/capital_flow/dragon_tiger/boards，其中 `earnings.data` 新增 `financial_report` 与 `dividend`，`boards` 表示板块涨跌榜），主链路 fail-open 降级 |
 | 策略 | 市场策略系统 | 内置 A股「三段式复盘策略」与美股「Regime Strategy」，输出进攻/均衡/防守或 risk-on/neutral/risk-off 计划，并附“仅供参考，不构成投资建议”提示 |
 | 复盘 | 大盘复盘 | 每日市场概览、板块涨跌；支持 cn(A股)/us(美股)/both(两者) 切换 |
-| 补全 | 智能补全 (MVP) | **[测试阶段]** 首页搜索框支持代码/名称/拼音/别名联想；**第一阶段仅限 A 股**，其他市场自动降级为手动输入 |
+| 补全 | 智能补全 (MVP) | **[测试阶段]** 首页搜索框支持代码/名称/拼音/别名联想；索引已覆盖 A股、港股、美股三个市场，支持通过 Tushare 或 AkShare 数据源更新 |
 | 智能导入 | 多源导入 | 支持图片、CSV/Excel 文件、剪贴板粘贴；Vision LLM 提取代码+名称；置信度分层确认；名称→代码解析（本地+拼音+AkShare） |
 | 历史记录 | 批量管理 | 支持多选、全选及批量删除历史分析记录，优化管理效率与 UI/UX 体验 |
 | 回测 | AI 回测验证 | 自动评估历史分析准确率，方向胜率、止盈止损命中率 |
@@ -50,6 +50,8 @@
 | 自动化 | 定时运行 | GitHub Actions 定时执行，无需服务器 |
 
 > 历史报告详情会优先展示 AI 返回的原始「狙击点位」文本，避免区间价、条件说明等复杂内容在历史回看时被压缩成单个数字。
+
+> Web 界面做小调整：首页进一步收敛了样式层级与移动端滚动体验，修复bug；问股页为 AI 回复新增消息复制按钮，并补强了会话导出、通知发送、历史删除和追问参数保护；首页「原始分析结果 / 分析快照」复制反馈改为按面板独立。
 
 > Web 管理认证支持运行时开关；如果系统中已保留管理员密码，重新开启认证时必须提供当前密码，避免在认证关闭窗口内直接获取新的管理员会话。
 > 多进程/多 worker 部署时，认证开关仅在当前进程即时生效；需重启或滚动重启全部 worker 以统一状态。
@@ -185,11 +187,11 @@
 | `NEWS_STRATEGY_PROFILE` | 新闻策略窗口档位：`ultra_short`(1天) / `short`(3天) / `medium`(7天) / `long`(30天)，默认 `short` | 可选 |
 | `NEWS_MAX_AGE_DAYS` | 新闻最大时效上限（天），默认 3；实际窗口 `effective_days = min(profile_days, NEWS_MAX_AGE_DAYS)`，例如 `ultra_short(1)` + `7` 仍为 `1` 天 | 可选 |
 | `BIAS_THRESHOLD` | 乖离率阈值（%），默认 5.0，超过提示不追高；强势趋势股自动放宽 | 可选 |
-| `AGENT_MODE` | 开启 Agent 策略问股模式（`true`/`false`，默认 false） | 可选 |
+| `AGENT_MODE` | 开启 Agent 策略问股模式（内部统一命名为 skill，`true`/`false`，默认 false） | 可选 |
 | `AGENT_LITELLM_MODEL` | Agent 主模型（可选）；留空继承 `LITELLM_MODEL`，无前缀会按 `openai/<model>` 解析 | 可选 |
-| `AGENT_SKILLS` | 激活的策略（逗号分隔），`all` 启用全部 11 个；不配置时默认 4 个，详见 `.env.example` | 可选 |
+| `AGENT_SKILLS` | 激活的策略技能 id（逗号分隔），`all` 启用全部策略技能；留空时使用主默认策略 skill（内置默认是 `bull_trend`），详见 `.env.example` | 可选 |
 | `AGENT_MAX_STEPS` | Agent 最大推理步数（默认 10） | 可选 |
-| `AGENT_STRATEGY_DIR` | 自定义策略目录（默认内置 `strategies/`） | 可选 |
+| `AGENT_SKILL_DIR` | 自定义策略技能目录（默认沿用内置 `strategies/` 兼容路径） | 可选 |
 | `TRADING_DAY_CHECK_ENABLED` | 交易日检查（默认 `true`）：非交易日跳过执行；设为 `false` 或使用 `--force-run` 强制执行 | 可选 |
 | `ENABLE_CHIP_DISTRIBUTION` | 启用筹码分布（Actions 默认 false；需筹码数据时在 Variables 中设为 true，接口可能不稳定） | 可选 |
 | `ENABLE_FUNDAMENTAL_PIPELINE` | 基本面聚合总开关；关闭时保持主流程不变 | 可选 |
@@ -351,15 +353,15 @@ LITELLM_MODEL=openai/deepseek-chat
 
 ### 智能搜索补全 (MVP)
 
-首页分析输入框已升级为“类搜索引擎”补全框，显著降低记忆负担：
+首页分析输入框已升级为”类搜索引擎”补全框，显著降低记忆负担：
 
-- **多维匹配**：支持输入股票代码、中文名、拼音缩写或别名（如 `gzmt` -> 贵州茅台）。
-- **分阶段支持**：目前处于 **MVP 测试阶段**，本地索引优先覆盖 **A 股市场**。
+- **多维匹配**：支持输入股票代码、中文名、拼音缩写或别名（如 `gzmt` -> 贵州茅台、`tencent` -> 腾讯控股、`aapl` -> Apple Inc.）。
+- **多市场覆盖**：本地索引已覆盖 **A股、港股、美股** 三个市场；通过 Tushare 或 AkShare 数据源生成，支持按需更新索引。
 - **自动降级逻辑**：
-  - **美股/港股**：若搜索未命中，用户直接按回车即可走原有手动输入流程，完全不影响分析。
   - **新股/异常**：若索引未及时更新或加载失败，系统将无缝退回普通输入模式，确保分析链路 100% 可用。
+  - **未命中**：搜索未命中时，用户直接按回车即可走原有手动输入流程，完全不影响分析。
 
-> 💡 **搜索范围提示**：自动补全目前仅针对 A 股进行试点优化。对于港股、美股或新上市标的，请继续直接输入代码（如 `AAPL`、`00700.HK`）并回车发起分析，系统会自动解析并处理。
+> 💡 **索引更新提示**：如需更新索引数据，可通过 `scripts/fetch_tushare_stock_list.py` 获取最新股票列表，再运行 `scripts/generate_index_from_csv.py` 重新生成索引文件。详见 [Tushare 股票列表获取工具使用说明](docs/TUSHARE_STOCK_LIST_GUIDE.md)。
 
 **LLM 用量查询**：`GET /api/v1/usage/summary?period=today|month|all`，返回按调用类型和模型分组的 token 消耗汇总（`total_calls`、`total_tokens`、`by_call_type`、`by_model`）。
 
@@ -367,11 +369,18 @@ LITELLM_MODEL=openai/deepseek-chat
 
 ### 历史报告详情
 
-在首页历史记录中选择一条分析记录后，点击「详细报告」按钮可在右侧抽屉中查看与推送通知格式一致的完整 Markdown 分析报告，包含舆情情报、核心结论、数据透视、作战计划等完整内容。
+在首页历史记录中选择一条分析记录后，点击「完整分析报告」按钮可在右侧抽屉中查看与推送通知格式一致的完整 Markdown 分析报告，包含舆情情报、核心结论、数据透视、作战计划等完整内容。
+
+报告头部提供两种复制方式：
+
+- 「复制 Markdown 源码」：保留原始 Markdown 结构，适合二次编辑、技术社区分享和笔记归档。
+- 「复制纯文本」：去除常见 Markdown 格式符号，适合微信、群聊等纯文本分享场景。
 
 ### 🤖 Agent 策略问股
 
 在 `.env` 中设置 `AGENT_MODE=true` 后启动服务，访问 `/chat` 页面即可开始多轮策略问答。
+
+> 对用户侧文案，本项目仍以“策略”为主称呼；代码、配置和 API 主字段统一使用 `skill`，可理解为“可复用的策略能力包”。
 
 - **选择策略**：均线金叉、缠论、波浪理论、多头趋势等 11 种内置策略
 - **自然语言提问**：如「用缠论分析 600519」，Agent 自动调用实时行情、K线、技术指标、新闻等工具
@@ -379,9 +388,9 @@ LITELLM_MODEL=openai/deepseek-chat
 - **多轮对话**：支持追问上下文，会话历史持久化保存
 - **导出与发送**：可将会话导出为 .md 文件，或发送到已配置的通知渠道
 - **后台执行**：切换页面不中断分析，完成时 Dock 问股图标显示角标
-- **Bot 命令**：`/ask` 策略分析（支持多股对比）、`/chat` 自由对话
-- **自定义策略**：在 `strategies/` 目录下新建 YAML 文件即可添加策略，无需写代码
-- **多 Agent 架构**（实验性）：设置 `AGENT_ARCH=multi` 启用 Technical → Intel → Risk → Strategy → Decision 多 Agent 级联编排，通过 `AGENT_ORCHESTRATOR_MODE` 控制深度（quick/standard/full/strategy）。超时或中间阶段 JSON 解析失败时，系统会优先保留已完成阶段结果并降级生成最小可用仪表盘，避免整份报告直接退回默认占位。详见 [完整配置指南](docs/full-guide.md)
+- **Bot 命令**：`/ask` 技能分析（支持多股对比）、`/chat` 自由对话
+- **自定义策略（Skill）**：在 `strategies/` 目录下新建 YAML 文件或在自定义 skill 目录中放入 `SKILL.md` bundle，即可添加新的交易策略，无需写代码
+- **多 Agent 架构**（实验性）：设置 `AGENT_ARCH=multi` 启用 Technical → Intel → Risk → Specialist → Decision 多 Agent 级联编排，通过 `AGENT_ORCHESTRATOR_MODE` 控制深度（quick/standard/full/specialist）。其中 `strategy` / `skill` 仍作为旧值兼容并会自动归一化到 `specialist`。超时或中间阶段 JSON 解析失败时，系统会优先保留已完成阶段结果并降级生成最小可用仪表盘，避免整份报告直接退回默认占位。详见 [完整配置指南](docs/full-guide.md)
 
 > **注意**：配置了任意 AI API Key 后，Agent 对话功能自动可用，无需手动设置 `AGENT_MODE=true`。如需显式关闭可设置 `AGENT_MODE=false`。每次对话会产生 LLM API 调用费用。若你手动修改了 `.env` 中的模型主备配置（如 `LITELLM_MODEL` / `AGENT_LITELLM_MODEL` / `LITELLM_FALLBACK_MODELS` / `LLM_CHANNELS`），需要重启服务或触发配置重载后，新进程才会按新模型生效。
 
@@ -420,9 +429,9 @@ LITELLM_MODEL=openai/deepseek-chat
 如果本项目对你有帮助，欢迎支持项目的持续维护与迭代，感谢支持 🙏  
 赞赏可备注联系方式，祝股市长虹
 
-| 支付宝 (Alipay) | 微信支付 (WeChat) | Ko-fi |
+| 支付宝 (Alipay) | 微信支付 (WeChat) | 小红书 |
 | :---: | :---: | :---: |
-| <img src="./sources/alipay.jpg" width="200" alt="Alipay"> | <img src="./sources/wechatpay.jpg" width="200" alt="WeChat Pay"> | <a href="https://ko-fi.com/mumu157" target="_blank"><img src="./sources/ko-fi.png" width="200" alt="Ko-fi"></a> |
+| <img src="./sources/alipay.jpg" width="200" alt="Alipay"> | <img src="./sources/wechatpay.jpg" width="200" alt="WeChat Pay"> | <img src="./sources/xiaohongshu.png" width="200" alt="小红书"> |
 
 ---
 
