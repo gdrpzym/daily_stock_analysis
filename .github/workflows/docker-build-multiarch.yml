@@ -2,8 +2,9 @@ name: Build and Push Multi-Arch Docker Images
 
 on:
   schedule:
-    # 每天 UTC 0:00（北京时间 8:00）检查上游更新
-    - cron: '0 0 * * *'
+    # 每天凌晨 4:00（北京时间）自动检查上游更新
+    # UTC 时间: 20:00 (前一天) = 北京时间 4:00 (当天)
+    - cron: '0 20 * * *'
   workflow_dispatch:
     inputs:
       image_tag:
